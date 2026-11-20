@@ -4,7 +4,7 @@ pipeline {
     environment {
         APP_NAME = "securedev-app"
         APP_PORT = "5000"
-        NETWORK_NAME = "devsecops-net"
+        NETWORK_NAME = "eva3ciber_devsecops-net"
     }
 
     stages {
