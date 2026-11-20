@@ -1,73 +1,67 @@
 pipeline {
     agent any
-
     environment {
-        APP_NAME = "securedev-app"
-        APP_PORT = "5000"
+        APP_IMAGE = "securedev-app"
         NETWORK_NAME = "eva3ciber_devsecops-net"
+        STAGING_CONTAINER = "app-staging"
+        PROD_CONTAINER = "app-prod"
     }
-
     stages {
         stage('1. Checkout & Dependencias') {
             steps {
                 checkout scm
-                echo "Verificando auditoría de dependencias..."
+                echo 'Verificando auditoría de dependencias...'
             }
         }
-
         stage('2. Construcción (Build Docker)') {
             steps {
-                echo "Construyendo imagen Docker de la aplicación..."
-                sh "docker build -t ${APP_NAME}:latest ./app"
+                echo 'Construyendo imagen Docker de la aplicación...'
+                sh "docker build -t ${APP_IMAGE}:latest ./app"
             }
         }
-
         stage('3. Despliegue Staging para Pruebas') {
             steps {
-                echo "Levantando contenedor temporal para escaneo DAST..."
+                echo 'Levantando contenedor en entorno aislado de pruebas...'
                 sh """
-                    docker rm -f ${APP_NAME}-staging || true
-                    docker run -d --name ${APP_NAME}-staging --network ${NETWORK_NAME} -p 5001:${APP_PORT} ${APP_NAME}:latest
-                    sleep 10
+                    docker rm -f ${STAGING_CONTAINER} || true
+                    docker run -d --name ${STAGING_CONTAINER} --network ${NETWORK_NAME} ${APP_IMAGE}:latest
+                    sleep 5
                 """
             }
         }
-
         stage('4. Pruebas de Seguridad Automatizadas (OWASP ZAP)') {
             steps {
-                echo "Ejecutando OWASP ZAP Baseline Scan..."
+                echo 'Ejecutando escaneo dinámico OWASP ZAP Baseline...'
                 sh """
                     mkdir -p zap-reports
-                    docker run --rm --network ${NETWORK_NAME} \
-                      -v \$(pwd)/zap-reports:/zap/wrk/:rw \
-                      ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-                      -t http://${APP_NAME}-staging:${APP_PORT} \
-                      -r zap_report.html || true
+                    docker rm -f zap-scanner || true
+                    docker run --name zap-scanner --network ${NETWORK_NAME} ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://${STAGING_CONTAINER}:5000 -r zap-report.html || true
+                    docker cp zap-scanner:/zap/wrk/zap-report.html ./zap-reports/zap-report.html || true
+                    docker rm -f zap-scanner || true
                 """
-            }
-            post {
-                always {
-                    publishHTML(target: [
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'zap-reports',
-                        reportFiles: 'zap_report.html',
-                        reportName: 'Reporte OWASP ZAP'
-                    ])
-                    sh "docker rm -f ${APP_NAME}-staging || true"
-                }
+                publishHTML([
+                    allowMissing: true,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'zap-reports',
+                    reportFiles: 'zap-report.html',
+                    reportName: 'Reporte OWASP ZAP'
+                ])
             }
         }
-
         stage('5. Despliegue a Producción') {
             steps {
-                echo "Desplegando versión segura en Producción..."
+                echo 'Desplegando aplicación en entorno de Producción...'
                 sh """
-                    docker rm -f ${APP_NAME}-prod || true
-                    docker run -d --name ${APP_NAME}-prod --network ${NETWORK_NAME} -p ${APP_PORT}:${APP_PORT} --restart always ${APP_NAME}:latest
+                    docker rm -f ${PROD_CONTAINER} || true
+                    docker run -d --name ${PROD_CONTAINER} --network ${NETWORK_NAME} -p 5000:5000 ${APP_IMAGE}:latest
                 """
             }
+        }
+    }
+    post {
+        always {
+            sh "docker rm -f ${STAGING_CONTAINER} || true"
         }
     }
 }
