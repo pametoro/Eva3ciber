@@ -4,13 +4,17 @@ pipeline {
         APP_IMAGE = "securedev-app"
         NETWORK_NAME = "eva3ciber_devsecops-net"
         STAGING_CONTAINER = "app-staging"
-        PROD_CONTAINER = "app-prod"
+        PROD_CONTAINER = "securedev-app-prod"
     }
     stages {
-        stage('1. Checkout & Dependencias') {
+        stage('1. Checkout & Dependencias (SCA/SAST)') {
             steps {
                 checkout scm
-                echo 'Verificando auditoría de dependencias...'
+                echo 'Ejecutando auditoría de dependencias (SCA) y análisis estático (SAST)...'
+                sh '''
+                    pip-audit -r ./app/requirements.txt || true
+                    bandit -r ./app -f txt || true
+                '''
             }
         }
         stage('2. Construcción (Build Docker)') {
@@ -29,23 +33,25 @@ pipeline {
                 """
             }
         }
-        stage('4. Pruebas de Seguridad Automatizadas (OWASP ZAP)') {
+stage('4. Pruebas de Seguridad Automatizadas (OWASP ZAP)') {
             steps {
                 echo 'Ejecutando escaneo dinámico OWASP ZAP Baseline...'
                 sh """
-                    mkdir -p zap-reports
+                    mkdir -p zap-reports-vulnerable
                     docker rm -f zap-scanner || true
-                    docker run --user root --name zap-scanner --network ${NETWORK_NAME} ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://${STAGING_CONTAINER}:5000 -r /zap/wrk/zap-report.html || true
-                    docker cp zap-scanner:/zap/wrk/zap-report.html ./zap-reports/zap-report.html || true
+                    docker volume create zap-wrk-vol || true
+                    docker run --user root --name zap-scanner --network ${NETWORK_NAME} -v zap-wrk-vol:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://${STAGING_CONTAINER}:5000 -r zap-report-vulnerable.html || true
+                    docker run --rm -v zap-wrk-vol:/data alpine cat /data/zap-report-vulnerable.html > ./zap-reports-vulnerable/zap-report-vulnerable.html || true
                     docker rm -f zap-scanner || true
+                    docker volume rm zap-wrk-vol || true
                 """
                 publishHTML([
                     allowMissing: true,
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
-                    reportDir: 'zap-reports',
-                    reportFiles: 'zap-report.html',
-                    reportName: 'Reporte OWASP ZAP'
+                    reportDir: 'zap-reports-vulnerable',
+                    reportFiles: 'zap-report-vulnerable.html',
+                    reportName: 'Reporte OWASP ZAP (Vulnerable)'
                 ])
             }
         }
@@ -53,8 +59,8 @@ pipeline {
             steps {
                 echo 'Desplegando aplicación en entorno de Producción...'
                 sh """
-                    docker rm -f ${PROD_CONTAINER} || true
-                    docker run -d --name ${PROD_CONTAINER} --network ${NETWORK_NAME} -p 5000:5000 ${APP_IMAGE}:latest
+                    docker rm -f ${PROD_CONTAINER} app-prod || true
+                    docker run -d --name ${PROD_CONTAINER} --network-alias app-prod --network ${NETWORK_NAME} -p 5000:5000 ${APP_IMAGE}:latest
                 """
             }
         }
