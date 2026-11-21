@@ -35,7 +35,7 @@ pipeline {
                 sh """
                     mkdir -p zap-reports
                     docker rm -f zap-scanner || true
-                    docker run --name zap-scanner --network ${NETWORK_NAME} ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://${STAGING_CONTAINER}:5000 -r zap-report.html || true
+                    docker run --user root --name zap-scanner --network ${NETWORK_NAME} ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://${STAGING_CONTAINER}:5000 -r zap-report.html || true
                     docker cp zap-scanner:/zap/wrk/zap-report.html ./zap-reports/zap-report.html || true
                     docker rm -f zap-scanner || true
                 """
