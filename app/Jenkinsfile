@@ -37,11 +37,11 @@ stage('4. Pruebas de Seguridad Automatizadas (OWASP ZAP)') {
             steps {
                 echo 'Ejecutando escaneo dinámico OWASP ZAP Baseline...'
                 sh """
-                    mkdir -p zap-reports-vulnerable
+                    mkdir -p zap-reports-mitigado
                     docker rm -f zap-scanner || true
                     docker volume create zap-wrk-vol || true
-                    docker run --user root --name zap-scanner --network ${NETWORK_NAME} -v zap-wrk-vol:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://${STAGING_CONTAINER}:5000 -r zap-report-vulnerable.html || true
-                    docker run --rm -v zap-wrk-vol:/data alpine cat /data/zap-report-vulnerable.html > ./zap-reports-vulnerable/zap-report-vulnerable.html || true
+                    docker run --user root --name zap-scanner --network ${NETWORK_NAME} -v zap-wrk-vol:/zap/wrk ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://${STAGING_CONTAINER}:5000 -r zap-report-mitigado.html || true
+                    docker run --rm -v zap-wrk-vol:/data alpine cat /data/zap-report-mitigado.html > ./zap-reports-mitigado/zap-report-mitigado.html || true
                     docker rm -f zap-scanner || true
                     docker volume rm zap-wrk-vol || true
                 """
@@ -49,9 +49,9 @@ stage('4. Pruebas de Seguridad Automatizadas (OWASP ZAP)') {
                     allowMissing: true,
                     alwaysLinkToLastBuild: true,
                     keepAll: true,
-                    reportDir: 'zap-reports-vulnerable',
-                    reportFiles: 'zap-report-vulnerable.html',
-                    reportName: 'Reporte OWASP ZAP (Vulnerable)'
+                    reportDir: 'zap-reports-mitigado',
+                    reportFiles: 'zap-report-mitigado.html',
+                    reportName: 'Reporte OWASP ZAP (Mitigado)'
                 ])
             }
         }
