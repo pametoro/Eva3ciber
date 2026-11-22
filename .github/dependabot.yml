@@ -1,10 +1,15 @@
-version: 2
+﻿version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/app"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "security"
+
+  - package-ecosystem: "docker"
+    directory: "/app"
+    schedule:
+      interval: "weekly"
